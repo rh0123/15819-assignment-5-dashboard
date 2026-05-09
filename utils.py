@@ -1,5 +1,4 @@
 import json
-import geopandas as gpd
 import pandas as pd
 import streamlit as st
 
@@ -125,107 +124,27 @@ section[data-testid="stSidebar"] { display: none; }
 </style>
 """
 
-# ── Raw data loader ───────────────────────────────────────────────────────────
-
-@st.cache_data
-def _load_raw():
-    zones = pd.read_csv("data/taxi_zone_lookup.csv")
-    df24  = pd.read_parquet("data/trips_pickup_combined_2024.parquet")
-    df23  = pd.read_parquet("data/trips_pickup_combined_2023.parquet")
-    df = pd.concat([
-        df23[df23["request_date"].dt.year == 2023],
-        df24[df24["request_date"].dt.year == 2024],
-    ], ignore_index=True)
-    df["month"] = df["request_date"].dt.to_period("M")
-    df = df.merge(
-        zones[["LocationID", "Borough", "Zone"]],
-        left_on="PULocationID", right_on="LocationID", how="left"
-    )
-    for col in ["base_passenger_fare", "driver_pay", "tips"]:
-        df[f"{col}_ws"] = df[col] * df["trip_count"]
-    df["miles_ws"] = df["trip_miles"] * df["trip_count"]
-    return df
-
-# ── Citywide monthly data ─────────────────────────────────────────────────────
+# ── Pre-aggregated data loaders ───────────────────────────────────────────────
 
 @st.cache_data
 def get_data():
-    df = _load_raw()
-
-    monthly = (
-        df.groupby(["month", "hvfhs_license_num"])["trip_count"]
-        .sum().unstack(fill_value=0)
-        .rename(columns={UBER: "uber", LYFT: "lyft"})
-        .sort_index()
-    )
-    monthly["total"]      = monthly["uber"] + monthly["lyft"]
-    monthly["uber_share"] = monthly["uber"] / monthly["total"] * 100
-
-    fare_agg = (
-        df.groupby(["month", "hvfhs_license_num"])["base_passenger_fare_ws"]
-        .sum().unstack(fill_value=0)
-        .rename(columns={UBER: "uber_fare", LYFT: "lyft_fare"})
-    )
-    monthly["uber_revenue_share"] = (
-        fare_agg["uber_fare"] / (fare_agg["uber_fare"] + fare_agg["lyft_fare"]) * 100
-    )
-
+    monthly = pd.read_parquet("data/precomputed_monthly.parquet")
+    monthly.index = pd.PeriodIndex(monthly.index, freq="M")
     return monthly
-
-# ── Borough data ──────────────────────────────────────────────────────────────
 
 @st.cache_data
 def get_borough_data():
-    df = _load_raw()
-    df = df[df["Borough"].isin(BOROUGHS)]
-
-    agg = (
-        df.groupby(["month", "Borough", "hvfhs_license_num"])
-        .agg(trips=("trip_count","sum"),
-             fare_ws=("base_passenger_fare_ws","sum"),
-             dpay_ws=("driver_pay_ws","sum"),
-             tips_ws=("tips_ws","sum"),
-             miles_ws=("miles_ws","sum"))
-        .reset_index()
+    wide = pd.read_parquet("data/precomputed_borough.parquet")
+    wide.index = pd.MultiIndex.from_tuples(
+        [(pd.Period(a, "M"), b) for a, b in wide.index],
+        names=["month", "Borough"]
     )
-
-    agg["fare_per_mile"]  = agg["fare_ws"]  / agg["miles_ws"]
-    agg["dpay_per_mile"]  = agg["dpay_ws"]  / agg["miles_ws"]
-    agg["take_rate"]      = (agg["fare_ws"] - agg["dpay_ws"]) / agg["fare_ws"] * 100
-    agg["avg_dist"]       = agg["miles_ws"] / agg["trips"]
-    agg["tip_rate"]       = agg["tips_ws"]  / agg["fare_ws"] * 100
-
-    uber = agg[agg["hvfhs_license_num"]==UBER].set_index(["month","Borough"])
-    lyft = agg[agg["hvfhs_license_num"]==LYFT].set_index(["month","Borough"])
-
-    cols = ["trips","fare_per_mile","dpay_per_mile","take_rate","avg_dist","tip_rate","fare_ws"]
-    wide = uber[cols].rename(columns={c: f"uber_{c}" for c in cols}).join(
-           lyft[cols].rename(columns={c: f"lyft_{c}" for c in cols}))
-
-    wide["uber_revenue_share"] = (
-        wide["uber_fare_ws"] / (wide["uber_fare_ws"] + wide["lyft_fare_ws"]) * 100
-    )
-    wide["lyft_revenue_share"] = 100 - wide["uber_revenue_share"]
-
-    days = {p: p.days_in_month for p in wide.index.get_level_values("month").unique()}
-    wide["uber_daily_trips"] = wide.apply(lambda r: r["uber_trips"] / days[r.name[0]], axis=1)
-    wide["lyft_daily_trips"] = wide.apply(lambda r: r["lyft_trips"] / days[r.name[0]], axis=1)
-
-    wide["uber_market_share"] = wide["uber_trips"] / (wide["uber_trips"] + wide["lyft_trips"]) * 100
-    wide["lyft_market_share"] = 100 - wide["uber_market_share"]
-
-    return wide.sort_index()
-
-# ── Borough GeoJSON ───────────────────────────────────────────────────────────
+    return wide
 
 @st.cache_data
 def get_borough_geojson():
-    gdf = gpd.read_file("data/taxi_zones/taxi_zones.shp")
-    gdf = (gdf[gdf["borough"].isin(BOROUGHS)]
-           .dissolve(by="borough")
-           .reset_index()[["borough","geometry"]]
-           .to_crs(epsg=4326))
-    return json.loads(gdf.to_json())
+    with open("data/borough_geo.json") as f:
+        return json.load(f)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
