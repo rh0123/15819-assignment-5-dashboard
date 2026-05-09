@@ -1,0 +1,24 @@
+# Assignment instructions & local files
+assignment-5-instructions.txt
+assignment-5-dashboarding.url
+.claude/
+
+# Original CSVs — replaced by parquet files for deployment
+data/trips_pickup_combined_*.csv
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

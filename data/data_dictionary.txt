@@ -1,0 +1,35 @@
+Descriptions for each column in the aggregated ride-sharing data CSV:
+
+1. request_datetime_floored: The pickup request time rounded down to the nearest hour.
+hvfhs_license_num: The High-Volume For-Hire Service license number that identifies
+the ride-sharing service provider. These are companies like Uber (HV0003) and Lyft
+(HV0005).
+
+2. PULocationID: Pickup Location ID that corresponds to specific taxi zones within NYC.
+These IDs map to geographic areas defined by the NYC Taxi & Limousine Commission
+(see lookup table).
+
+3. trip_miles: The average distance traveled for trips in this grouping, measured in miles.
+
+4. trip_time: The average duration of trips in this grouping, measured in seconds.
+
+5. base_passenger_fare: The average amount charged to passengers (excluding tolls,
+surcharges, and tips) for trips in this grouping.
+
+6. tolls: The average amount of tolls paid during trips in this grouping.
+
+7. congestion_surcharge: The average congestion surcharge applied to trips in this
+grouping. This fee is charged for trips that enter Manhattan's congestion zone.
+
+8. airport_fee: The average fee charged for trips that start or end at airports in this
+grouping.
+
+9. tips: The average tip amount given by passengers for trips in this grouping.
+
+10. driver_pay: The average amount paid to drivers for trips in this grouping.
+
+11. request_hour: The hour of the day (0-23) when the ride was requested, extracted from
+the request_datetime_floored field.
+
+12. request_date: The calendar date when the ride was requested, extracted from the
+request_datetime_floored field.
